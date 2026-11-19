@@ -1,4 +1,4 @@
-// Neon Palms Cover Studio — the editor.
+// Neon Palms Cover Studio — the editor, v2.
 // Wires the page to the cover renderer: photo tray, layout and grade
 // pickers, caption fields, effect sliders, per-panel drag / zoom, an
 // undo / redo history, the one-click auto-compose, and PNG export in the
@@ -8,7 +8,10 @@ import { EXPORT_SIZES, GRADES, LAYOUTS, exportCoverPNG, layoutPanels, renderCove
 import { PhotoStore } from './photos.js';
 import { applyShotToState, parseShotQuery } from './shots.js';
 
-const CURATED_DEAL = ['boulevard', 'neon-street', 'pier', 'rooftop', 'neon-street', 'boulevard', 'rooftop', 'pier', 'boulevard'];
+// Ten distinct scenes, dealt in order so a nine-panel cover never repeats
+// a scene: every panel shows a different vignette of the coast.
+const CURATED_DEAL = ['boulevard', 'pier', 'rooftop', 'neon-street', 'marina',
+  'downtown', 'beach', 'highway', 'boardwalk', 'motel'];
 
 const store = new PhotoStore();
 const canvas = document.getElementById('preview');
@@ -25,6 +28,8 @@ const state = {
   grain: 0.55,
   vignette: 0.5,
   strength: 0.85,
+  halftone: 0,
+  leak: 0.35,
   size: 'square',
   panels: [],
 };
@@ -76,7 +81,7 @@ function undo() {
 }
 
 function redo() {
-  if (!redoStack.length) return;
+  if (!undoStack.length) return;
   undoStack.push(snapshot());
   restore(redoStack.pop());
   syncHistoryButtons();
@@ -226,6 +231,13 @@ function bindInputs() {
   bindRange('grainRange', 'grain', 0.01);
   bindRange('vignetteRange', 'vignette', 0.01);
   bindRange('strengthRange', 'strength', 0.01);
+  bindRange('leakRange', 'leak', 0.01);
+  const halftoneCheck = document.getElementById('halftoneCheck');
+  halftoneCheck.addEventListener('change', () => {
+    beginChange();
+    state.halftone = halftoneCheck.checked ? 1 : 0;
+    render();
+  });
   document.getElementById('fileInput').addEventListener('change', async (ev) => {
     const files = [...ev.target.files];
     if (!files.length) return;
@@ -246,7 +258,6 @@ function bindInputs() {
     render();
   });
   document.getElementById('resetPanelBtn').addEventListener('click', () => {
-    beginChange();
     const p = state.panels[selectedPanel];
     p.x = 0; p.y = 0; p.zoom = 1;
     render();
@@ -270,6 +281,8 @@ function syncUIFromState() {
   document.getElementById('grainRange').value = Math.round(state.grain * 100);
   document.getElementById('vignetteRange').value = Math.round(state.vignette * 100);
   document.getElementById('strengthRange').value = Math.round(state.strength * 100);
+  document.getElementById('leakRange').value = Math.round(state.leak * 100);
+  document.getElementById('halftoneCheck').checked = state.halftone === 1;
   document.getElementById('sizeSelect').value = state.size;
   for (const b of document.querySelectorAll('#layoutList .pick')) {
     b.classList.toggle('active', b.dataset.layout === state.layout);
@@ -279,20 +292,22 @@ function syncUIFromState() {
   }
 }
 
-// One click from photos to a finished cover: deal the photos across the
-// panels and set the poster effects to their sweet spot.
+// One click from photos to a finished cover: deal the ten scenes across
+// the panels in order — no scene repeats — and set the poster effects to
+// their sweet spot.
 function autoCompose() {
   beginChange();
   const ids = store.ids();
   state.panels = state.panels.map((p, i) => ({
-    photo: ids.length ? ids[(i * 2 + 1) % ids.length] : p.photo,
+    photo: ids.length ? ids[i % ids.length] : p.photo,
     x: 0, y: 0, zoom: 1,
   }));
-  if (state.panels.length && ids.length) state.panels[0].photo = ids[0];
   state.ink = 5;
   state.grain = 0.55;
   state.vignette = 0.5;
   state.strength = 0.85;
+  state.halftone = 0;
+  state.leak = 0.35;
   syncUIFromState();
   render();
   setStatus('Composed. Nudge any panel, tweak the caption, then export your PNG.');

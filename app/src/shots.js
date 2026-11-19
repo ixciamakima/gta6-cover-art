@@ -9,7 +9,7 @@ export function parseShotQuery(search) {
   const mode = q.get('shot');
   if (!mode) return null;
   const shot = { mode };
-  for (const key of ['photo', 'layout', 'grade', 'title', 'subtitle', 'size']) {
+  for (const key of ['photo', 'layout', 'grade', 'title', 'subtitle', 'size', 'halftone', 'leak', 'hero']) {
     if (q.has(key)) shot[key] = q.get(key);
   }
   return shot;
@@ -31,6 +31,14 @@ export function applyShotToState(state, shot, sampleIds) {
     state.panels = state.panels.map((p, i) => ({ ...p, photo: sampleIds[i % sampleIds.length] }));
   } else if (shot.photo && sampleIds.includes(shot.photo)) {
     state.panels = state.panels.map((p) => ({ ...p, photo: shot.photo }));
+  }
+  if (shot.hero && sampleIds.includes(shot.hero)) {
+    state.panels = state.panels.map((p, i) => (i === 0 ? { ...p, photo: shot.hero } : p));
+  }
+  if (shot.halftone === '1') state.halftone = 1;
+  if (shot.leak !== undefined && shot.leak !== '') {
+    const v = Number(shot.leak);
+    if (Number.isFinite(v)) state.leak = Math.max(0, Math.min(1, v));
   }
   return state;
 }

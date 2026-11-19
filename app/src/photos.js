@@ -1,13 +1,19 @@
-// Neon Palms Cover Studio — the photo store.
-// Holds every photo the cover can use: the four painted sample scenes that
+// Neon Palms Cover Studio — the photo store, v2.
+// Holds every photo the cover can use: the ten painted sample scenes that
 // ship with the app, plus any photo the person picks from their own
 // machine. Files are read locally with object URLs and never uploaded.
 
 export const SAMPLE_PHOTOS = [
   { id: 'boulevard', name: 'Boulevard at dusk', src: 'samples/boulevard.jpg' },
   { id: 'pier', name: 'The old pier', src: 'samples/pier.jpg' },
-  { id: 'neon-street', name: 'Neon street, wet', src: 'samples/neon-street.jpg' },
   { id: 'rooftop', name: 'Rooftop at sundown', src: 'samples/rooftop.jpg' },
+  { id: 'neon-street', name: 'Neon street, wet', src: 'samples/neon-street.jpg' },
+  { id: 'marina', name: 'Marina sunrise', src: 'samples/marina.jpg' },
+  { id: 'downtown', name: 'Downtown night', src: 'samples/downtown.jpg' },
+  { id: 'beach', name: 'Beach morning', src: 'samples/beach.jpg' },
+  { id: 'highway', name: 'Highway at dusk', src: 'samples/highway.jpg' },
+  { id: 'boardwalk', name: 'Boardwalk evening', src: 'samples/boardwalk.jpg' },
+  { id: 'motel', name: 'Motel neon', src: 'samples/motel.jpg' },
 ];
 
 function loadImage(src) {

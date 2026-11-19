@@ -1,8 +1,8 @@
-// Neon Palms Cover Studio — the cover renderer.
-// Draws the whole poster on a 2D canvas: graded photo panels in one of six
-// layouts, ink-band posterising, sunset / neon gradient-map grades, grain,
-// vignette, and display lettering with a script subtitle. Pure canvas, no
-// network, no libraries — everything is painted here.
+// Neon Palms Cover Studio — the cover renderer, v2.
+// Draws the whole poster on a 2D canvas: graded photo panels in one of
+// ten layouts, ink-band posterising, sunset / neon gradient-map grades,
+// halftone print and light-leak treatments, grain, vignette, and display
+// lettering with a script subtitle. Pure canvas, no network, no libraries.
 
 export const EXPORT_SIZES = [
   { id: 'square', label: 'Square post · 1080 × 1080', w: 1080, h: 1080 },
@@ -17,6 +17,8 @@ export const GRADES = [
   { id: 'golden-hour', name: 'Golden Hour', stops: [[0, 28, 13, 4], [0.3, 77, 36, 8], [0.55, 156, 84, 16], [0.78, 232, 155, 60], [1, 255, 243, 196]] },
   { id: 'chrome-dusk', name: 'Chrome Dusk', stops: [[0, 10, 14, 30], [0.3, 31, 42, 82], [0.52, 74, 58, 110], [0.72, 125, 107, 168], [0.88, 195, 203, 232], [1, 255, 255, 255]] },
   { id: 'rose-mirage', name: 'Rose Mirage', stops: [[0, 30, 7, 22], [0.3, 87, 18, 51], [0.55, 161, 28, 82], [0.78, 232, 93, 117], [1, 255, 217, 176]] },
+  { id: 'acid-vice', name: 'Acid Vice', stops: [[0, 8, 20, 8], [0.3, 24, 92, 28], [0.55, 120, 190, 40], [0.78, 220, 240, 90], [0.92, 255, 120, 200], [1, 255, 240, 250]] },
+  { id: 'ultraviolet', name: 'Ultraviolet', stops: [[0, 8, 4, 28], [0.3, 48, 18, 92], [0.55, 110, 40, 170], [0.78, 180, 90, 235], [0.92, 255, 120, 200], [1, 255, 230, 240]] },
 ];
 
 export const LAYOUTS = [
@@ -26,6 +28,10 @@ export const LAYOUTS = [
   { id: 'magazine-six', name: 'Magazine · 6 panels' },
   { id: 'snapshots', name: 'Tilted Snapshots' },
   { id: 'story-duo', name: 'Story Duo' },
+  { id: 'poster-one', name: 'Poster One · single scene' },
+  { id: 'diptych', name: 'Diptych · two tall panels' },
+  { id: 'triptych', name: 'Triptych · three columns' },
+  { id: 'billboard', name: 'Billboard · scene + strip' },
 ];
 
 const INK = '#0d0518';
@@ -142,6 +148,20 @@ export function layoutPanels(layoutId, W, H) {
   } else if (layoutId === 'story-duo') {
     add(0, 0, 1, 0.405); add(0, 0.595, 1, 0.405);
     title = { x: 0, y: 0.385, w: 1, h: 0.23, band: true };
+  } else if (layoutId === 'poster-one') {
+    // One big scene above a tall title band: the strongest single image.
+    add(0, 0, 1, 0.76);
+    title = { x: 0, y: 0.76, w: 1, h: 0.24, band: true };
+  } else if (layoutId === 'diptych') {
+    add(0, 0, 0.494, 0.76); add(0.506, 0, 0.494, 0.76);
+    title = { x: 0, y: 0.76, w: 1, h: 0.24, band: true };
+  } else if (layoutId === 'triptych') {
+    add(0, 0, 0.327, 0.76); add(0.3365, 0, 0.327, 0.76); add(0.673, 0, 0.327, 0.76);
+    title = { x: 0, y: 0.76, w: 1, h: 0.24, band: true };
+  } else if (layoutId === 'billboard') {
+    add(0, 0, 1, 0.50);
+    add(0, 0.52, 0.327, 0.20); add(0.3365, 0.52, 0.327, 0.20); add(0.673, 0.52, 0.327, 0.20);
+    title = { x: 0, y: 0.74, w: 1, h: 0.26, band: true };
   } else {
     // nine-grid: the classic cover — 3 × 3 panels over a title band.
     const gridH = 0.783;
@@ -208,7 +228,7 @@ function fitFont(ctx, text, family, startPx, maxWidth) {
 }
 
 // The title block: kicker, big gradient-filled display title with a heavy
-// outline, script subtitle, and the heat-meter stars.
+// outline and a soft drop shadow, script subtitle, and the heat-meter stars.
 function drawTitleBlock(ctx, W, H, state, title) {
   const tx = title.x * W;
   const ty = title.y * H;
@@ -229,17 +249,25 @@ function drawTitleBlock(ctx, W, H, state, title) {
   const cx = tx + tw / 2;
   const pad = tw * 0.05;
   const titleText = (state.title || 'NEON PALMS').toUpperCase();
-  const kickerPx = Math.max(11, th * (title.masthead ? 0.11 : 0.13));
+  let kickerPx = Math.max(11, th * (title.masthead ? 0.11 : 0.13));
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   if (!title.masthead) {
-    ctx.font = `${kickerPx}px Anton, sans-serif`;
-    try { ctx.letterSpacing = `${Math.round(kickerPx * 0.42)}px`; } catch (e) { /* older canvas */ }
+    // Shrink the kicker until it fits the band — a tall band on a narrow
+    // cover (portrait, square) would otherwise clip it at both edges.
+    const kickerText = (state.kicker || '').toUpperCase();
+    const maxKickW = tw - pad * 2;
+    while (kickerPx > 10) {
+      ctx.font = `${kickerPx}px Anton, sans-serif`;
+      try { ctx.letterSpacing = `${Math.round(kickerPx * 0.42)}px`; } catch (e) { /* older canvas */ }
+      if (ctx.measureText(kickerText).width <= maxKickW) break;
+      kickerPx -= 1;
+    }
     ctx.fillStyle = '#ffd76a';
-    ctx.fillText((state.kicker || '').toUpperCase(), cx, ty + th * 0.20);
+    ctx.fillText(kickerText, cx, ty + th * 0.20);
     try { ctx.letterSpacing = '0px'; } catch (e) { /* ignore */ }
   }
-  const titlePx = fitFont(ctx, titleText, 'Anton, sans-serif', th * (title.masthead ? 0.52 : 0.40), tw - pad * 2);
+  const titlePx = fitFont(ctx, titleText, 'Anton, sans-serif', th * (title.masthead ? 0.56 : 0.47), tw - pad * 2);
   const grad = ctx.createLinearGradient(0, ty + th * 0.2, 0, ty + th * 0.85);
   grad.addColorStop(0, '#fff3c4'); grad.addColorStop(0.45, '#ffb35c');
   grad.addColorStop(0.75, '#ff2e88'); grad.addColorStop(1, '#7a2bff');
@@ -248,18 +276,32 @@ function drawTitleBlock(ctx, W, H, state, title) {
   ctx.strokeStyle = '#160424';
   ctx.lineWidth = Math.max(3, titlePx * 0.16);
   const titleY = ty + th * (title.masthead ? 0.62 : 0.65);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = titlePx * 0.18;
+  ctx.shadowOffsetY = titlePx * 0.04;
   ctx.strokeText(titleText, cx, titleY);
   ctx.fillStyle = grad;
   ctx.fillText(titleText, cx, titleY);
+  ctx.restore();
   const sub = state.subtitle || '';
   if (sub) {
-    const subPx = Math.max(13, titlePx * 0.36);
-    ctx.font = `${subPx}px Pacifico, cursive`;
+    // Keep the script clear of the heat-meter stars: shrink it until it
+    // fits the space left of the stars, and centre it in that space.
+    const starW = title.band && !title.masthead ? th * 0.085 * 10 + pad : 0;
+    const subCx = cx - (starW ? (starW + th * 0.05) / 2 : 0);
+    const maxSubW = tw - pad * 2 - starW - (starW ? th * 0.05 : 0);
+    let subPx = Math.max(13, titlePx * 0.36);
+    while (subPx > 12) {
+      ctx.font = `${subPx}px Pacifico, cursive`;
+      if (ctx.measureText(sub).width <= maxSubW) break;
+      subPx -= 1;
+    }
     ctx.save();
     ctx.shadowColor = '#ff2e88';
     ctx.shadowBlur = subPx * 0.5;
     ctx.fillStyle = '#ffeef7';
-    ctx.fillText(sub, cx, ty + th * (title.masthead ? 0.92 : 0.90));
+    ctx.fillText(sub, subCx, ty + th * (title.masthead ? 0.92 : 0.90));
     ctx.restore();
   }
   // Heat meter: five stars at the band's right-hand end.
@@ -295,6 +337,36 @@ function drawSeal(ctx, x, y, r) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffeef7';
   ctx.fillText('EST · 2026', x, y + r * 0.48);
+  ctx.restore();
+}
+
+// Halftone print treatment: dot rows over every photo panel.
+function applyHalftone(ctx, panels) {
+  ctx.save();
+  ctx.globalAlpha = 0.16;
+  for (const p of panels) {
+    if (p.rot) continue;
+    halftoneBand(ctx, p.x, p.y, p.w, p.h, '#000000');
+  }
+  ctx.restore();
+}
+
+// Light leak: a warm flare in one corner and a cool wash in the other.
+function applyLightLeak(ctx, W, H, amount) {
+  if (amount <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const warm = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(W, H) * 0.85);
+  warm.addColorStop(0, `rgba(255,150,60,${(amount * 0.34).toFixed(3)})`);
+  warm.addColorStop(0.55, `rgba(255,110,90,${(amount * 0.12).toFixed(3)})`);
+  warm.addColorStop(1, 'rgba(255,110,90,0)');
+  ctx.fillStyle = warm;
+  ctx.fillRect(0, 0, W, H);
+  const cool = ctx.createRadialGradient(W, H, 0, W, H, Math.max(W, H) * 0.8);
+  cool.addColorStop(0, `rgba(120,80,255,${(amount * 0.22).toFixed(3)})`);
+  cool.addColorStop(1, 'rgba(120,80,255,0)');
+  ctx.fillStyle = cool;
+  ctx.fillRect(0, 0, W, H);
   ctx.restore();
 }
 
@@ -352,9 +424,11 @@ export function renderCover(ctx, W, H, state, photos) {
     }
     ctx.restore();
   });
+  if (state.halftone) applyHalftone(ctx, panels);
   drawTitleBlock(ctx, W, H, state, title);
   if (state.layout === 'full-bleed') drawSeal(ctx, W * 0.90, H * 0.115, W * 0.052);
   if (state.layout === 'magazine-six') drawSeal(ctx, W * 0.935, H * 0.078, W * 0.036);
+  applyLightLeak(ctx, W, H, state.leak || 0);
   // Finish: grain, vignette, and a hairline frame.
   if (state.grain > 0) {
     ctx.save();
