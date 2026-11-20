@@ -1,448 +1,413 @@
-// Neon Palms Cover Studio — the editor, v2.
-// Wires the page to the cover renderer: photo tray, layout and grade
-// pickers, caption fields, effect sliders, per-panel drag / zoom, an
-// undo / redo history, the one-click auto-compose, and PNG export in the
-// four post sizes. Everything runs locally in the page.
+// Palm Coast Cover Studio — editor wiring.
+//
+// Owns the studio state, binds every control in the sidebar, handles
+// photo upload (file picker and drag-and-drop — files are read into
+// memory only), per-panel reframing by dragging on the canvas, zoom
+// by wheel or slider, and PNG export at the four post sizes.
+//
+// It also exposes the small window.neonPalms API the screenshot
+// harness uses: exportDataURL(w, h) renders a cover offscreen at an
+// exact size, and applyQuery() stages a scene from URL parameters.
 
-import { EXPORT_SIZES, GRADES, LAYOUTS, exportCoverPNG, layoutPanels, renderCover } from './cover.js';
-import { PhotoStore } from './photos.js';
-import { applyShotToState, parseShotQuery } from './shots.js';
+(function () {
+  'use strict';
 
-// Ten distinct scenes, dealt in order so a nine-panel cover never repeats
-// a scene: every panel shows a different vignette of the coast.
-const CURATED_DEAL = ['boulevard', 'pier', 'rooftop', 'neon-street', 'marina',
-  'downtown', 'beach', 'highway', 'boardwalk', 'motel'];
+  var SIZES = [
+    { id: 'landscape', name: 'Landscape 16:9', w: 1920, h: 1080 },
+    { id: 'portrait', name: 'Portrait 4:5', w: 1080, h: 1350 },
+    { id: 'square', name: 'Square 1:1', w: 1080, h: 1080 },
+    { id: 'story', name: 'Story 9:16', w: 1080, h: 1920 }
+  ];
 
-const store = new PhotoStore();
-const canvas = document.getElementById('preview');
-const ctx = canvas.getContext('2d');
-
-const state = {
-  layout: 'nine-grid',
-  grade: 'vice-sunset',
-  title: 'Neon Palms',
-  subtitle: 'palm coast stories',
-  kicker: 'Palm Coast · Neon Nights · Bad Roads',
-  heat: 4,
-  ink: 5,
-  grain: 0.55,
-  vignette: 0.5,
-  strength: 0.85,
-  halftone: 0,
-  leak: 0.35,
-  size: 'square',
-  panels: [],
-};
-
-let selectedPanel = 0;
-const undoStack = [];
-const redoStack = [];
-
-function panelCount(layoutId) {
-  return layoutPanels(layoutId, 100, 100).panels.length;
-}
-
-function freshPanel(i) {
-  return { photo: CURATED_DEAL[i % CURATED_DEAL.length], x: 0, y: 0, zoom: 1 };
-}
-
-function ensurePanels() {
-  const n = panelCount(state.layout);
-  while (state.panels.length < n) state.panels.push(freshPanel(state.panels.length));
-  state.panels.length = n;
-  if (selectedPanel >= n) selectedPanel = 0;
-}
-
-function snapshot() {
-  return JSON.stringify(state);
-}
-
-function beginChange() {
-  undoStack.push(snapshot());
-  if (undoStack.length > 60) undoStack.shift();
-  redoStack.length = 0;
-  syncHistoryButtons();
-}
-
-function restore(json) {
-  const next = JSON.parse(json);
-  for (const key of Object.keys(state)) delete state[key];
-  Object.assign(state, next);
-  ensurePanels();
-  syncUIFromState();
-  render();
-}
-
-function undo() {
-  if (!undoStack.length) return;
-  redoStack.push(snapshot());
-  restore(undoStack.pop());
-  syncHistoryButtons();
-}
-
-function redo() {
-  if (!undoStack.length) return;
-  undoStack.push(snapshot());
-  restore(redoStack.pop());
-  syncHistoryButtons();
-}
-
-function syncHistoryButtons() {
-  document.getElementById('undoBtn').disabled = undoStack.length === 0;
-  document.getElementById('redoBtn').disabled = redoStack.length === 0;
-}
-
-function sizeById(id) {
-  return EXPORT_SIZES.find((s) => s.id === id) || EXPORT_SIZES[0];
-}
-
-function render() {
-  const size = sizeById(state.size);
-  if (canvas.width !== size.w || canvas.height !== size.h) {
-    canvas.width = size.w;
-    canvas.height = size.h;
-  }
-  renderCover(ctx, canvas.width, canvas.height, state, store);
-  drawSelection();
-}
-
-function drawSelection() {
-  if (document.body.classList.contains('shot-cover')) return;
-  const { panels } = layoutPanels(state.layout, canvas.width, canvas.height);
-  const p = panels[selectedPanel];
-  if (!p) return;
-  ctx.save();
-  ctx.strokeStyle = '#ffd76a';
-  ctx.lineWidth = Math.max(2, canvas.width * 0.0035);
-  ctx.setLineDash([canvas.width * 0.012, canvas.width * 0.008]);
-  if (p.rot) {
-    ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
-    ctx.rotate(p.rot);
-    ctx.strokeRect(-p.w / 2, -p.h / 2, p.w, p.h);
-  } else {
-    ctx.strokeRect(p.x, p.y, p.w, p.h);
-  }
-  ctx.restore();
-  const info = document.getElementById('panelInfo');
-  const pick = state.panels[selectedPanel];
-  const photo = pick && pick.photo ? store.get(pick.photo) : null;
-  info.textContent = `Panel ${selectedPanel + 1} of ${panels.length}${photo ? ` · ${photo.name}` : ' · empty'} — drag to move the photo, scroll to zoom.`;
-}
-
-// ---------- controls ----------
-
-function buildPickers() {
-  const layoutList = document.getElementById('layoutList');
-  for (const layout of LAYOUTS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'pick';
-    b.dataset.layout = layout.id;
-    b.textContent = layout.name;
-    b.addEventListener('click', () => {
-      if (state.layout === layout.id) return;
-      beginChange();
-      state.layout = layout.id;
-      ensurePanels();
-      syncUIFromState();
-      render();
-    });
-    layoutList.appendChild(b);
-  }
-  const gradeList = document.getElementById('gradeList');
-  for (const grade of GRADES) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'pick grade';
-    b.dataset.grade = grade.id;
-    b.textContent = grade.name;
-    b.addEventListener('click', () => {
-      if (state.grade === grade.id) return;
-      beginChange();
-      state.grade = grade.id;
-      syncUIFromState();
-      render();
-    });
-    gradeList.appendChild(b);
-  }
-  const sizeSelect = document.getElementById('sizeSelect');
-  for (const size of EXPORT_SIZES) {
-    const o = document.createElement('option');
-    o.value = size.id;
-    o.textContent = size.label;
-    sizeSelect.appendChild(o);
-  }
-  sizeSelect.addEventListener('change', () => {
-    beginChange();
-    state.size = sizeSelect.value;
-    render();
-  });
-}
-
-function buildTray() {
-  const tray = document.getElementById('photoTray');
-  tray.innerHTML = '';
-  for (const photo of store.photos) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'thumb';
-    b.title = `${photo.name} — click to put it in the selected panel`;
-    const img = document.createElement('img');
-    img.src = photo.thumb;
-    img.alt = photo.name;
-    const label = document.createElement('span');
-    label.textContent = photo.name;
-    b.append(img, label);
-    b.addEventListener('click', () => {
-      beginChange();
-      state.panels[selectedPanel].photo = photo.id;
-      render();
-    });
-    b.addEventListener('dblclick', () => {
-      beginChange();
-      for (const p of state.panels) p.photo = photo.id;
-      render();
-    });
-    tray.appendChild(b);
-  }
-}
-
-function bindInputs() {
-  const bind = (id, key, parse) => {
-    const el = document.getElementById(id);
-    el.addEventListener('focus', () => beginChange());
-    el.addEventListener('input', () => {
-      state[key] = parse(el.value);
-      render();
-    });
+  var state = {
+    title: 'Neon Palms',
+    subtitle: 'palm coast stories',
+    kicker: 'One summer · Two outlaws · No brakes',
+    layout: 'blockbuster',
+    grade: 'vice-sunset',
+    fillMode: 'spread',
+    singlePhoto: 0,
+    sizeId: 'landscape',
+    frames: []
   };
-  bind('titleInput', 'title', (v) => v.slice(0, 24));
-  bind('subtitleInput', 'subtitle', (v) => v.slice(0, 42));
-  bind('kickerInput', 'kicker', (v) => v.slice(0, 48));
-  const bindRange = (id, key, scale) => {
-    const el = document.getElementById(id);
-    el.addEventListener('input', () => {
-      state[key] = Number(el.value) * scale;
-      render();
+  for (var f = 0; f < 9; f++) {
+    state.frames.push({ photo: f, dx: 0, dy: 0, zoom: 1 });
+  }
+
+  var pool = [];        // loaded Image elements, samples or user photos
+  var poolLabels = [];  // matching thumbnail captions
+  var selectedPanel = 0;
+  var canvas, ctx;
+  var renderQueued = false;
+  var readyResolve;
+  var whenReady = new Promise(function (res) { readyResolve = res; });
+
+  function $(id) { return document.getElementById(id); }
+
+  function currentSize() {
+    for (var i = 0; i < SIZES.length; i++) {
+      if (SIZES[i].id === state.sizeId) return SIZES[i];
+    }
+    return SIZES[0];
+  }
+
+  function panelCount() {
+    var size = currentSize();
+    return window.PalmCover.geometry(state.layout, size.w, size.h).panels.length;
+  }
+
+  // --------------------------------------------------------------
+  // Rendering
+  // --------------------------------------------------------------
+  function renderNow() {
+    renderQueued = false;
+    if (!pool.length) return;
+    var size = currentSize();
+    if (canvas.width !== size.w || canvas.height !== size.h) {
+      canvas.width = size.w;
+      canvas.height = size.h;
+    }
+    window.PalmCover.render(ctx, size.w, size.h, state, pool);
+  }
+
+  function requestRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(renderNow);
+  }
+
+  function exportDataURL(w, h) {
+    var off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    window.PalmCover.render(off.getContext('2d'), w, h, state, pool);
+    return off.toDataURL('image/png');
+  }
+
+  function exportPNG() {
+    var size = currentSize();
+    var url = exportDataURL(size.w, size.h);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'palm-coast-cover-' + size.w + 'x' + size.h + '.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  // --------------------------------------------------------------
+  // Control builders
+  // --------------------------------------------------------------
+  function buildThumbs() {
+    var wrap = $('thumbs');
+    wrap.innerHTML = '';
+    pool.forEach(function (img, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'thumb';
+      b.title = poolLabels[i] || ('Photo ' + (i + 1));
+      var t = document.createElement('img');
+      t.src = img.src;
+      t.alt = b.title;
+      b.appendChild(t);
+      b.addEventListener('click', function () {
+        if (state.fillMode === 'single') {
+          state.singlePhoto = i;
+        } else {
+          state.frames[selectedPanel].photo = i;
+        }
+        markThumbs();
+        requestRender();
+      });
+      wrap.appendChild(b);
     });
-  };
-  bindRange('heatRange', 'heat', 1);
-  bindRange('inkRange', 'ink', 1);
-  bindRange('grainRange', 'grain', 0.01);
-  bindRange('vignetteRange', 'vignette', 0.01);
-  bindRange('strengthRange', 'strength', 0.01);
-  bindRange('leakRange', 'leak', 0.01);
-  const halftoneCheck = document.getElementById('halftoneCheck');
-  halftoneCheck.addEventListener('change', () => {
-    beginChange();
-    state.halftone = halftoneCheck.checked ? 1 : 0;
-    render();
-  });
-  document.getElementById('fileInput').addEventListener('change', async (ev) => {
-    const files = [...ev.target.files];
+    markThumbs();
+  }
+
+  function markThumbs() {
+    var active = state.fillMode === 'single'
+      ? state.singlePhoto
+      : state.frames[selectedPanel].photo;
+    var nodes = $('thumbs').children;
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].classList.toggle('active', i === active);
+    }
+  }
+
+  function buildPanelBar() {
+    var wrap = $('panelBar');
+    wrap.innerHTML = '';
+    var n = panelCount();
+    if (selectedPanel >= n) selectedPanel = 0;
+    for (var i = 0; i < n; i++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = i === 0 ? 'Hero' : 'Panel ' + (i + 1);
+      b.className = 'chip' + (i === selectedPanel ? ' active' : '');
+      (function (idx) {
+        b.addEventListener('click', function () {
+          selectedPanel = idx;
+          buildPanelBar();
+          syncZoom();
+          markThumbs();
+        });
+      })(i);
+      wrap.appendChild(b);
+    }
+  }
+
+  function buildChoices(wrapId, items, current, onPick) {
+    var wrap = $(wrapId);
+    wrap.innerHTML = '';
+    items.forEach(function (item) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = item.name;
+      b.className = 'choice' + (item.id === current ? ' active' : '');
+      b.addEventListener('click', function () { onPick(item.id); });
+      wrap.appendChild(b);
+    });
+  }
+
+  function refreshChoices() {
+    buildChoices('layoutChoices', window.PalmCover.LAYOUTS, state.layout,
+      function (id) {
+        state.layout = id;
+        buildPanelBar();
+        refreshChoices();
+        requestRender();
+      });
+    buildChoices('gradeChoices', window.PalmCover.GRADES, state.grade,
+      function (id) {
+        state.grade = id;
+        refreshChoices();
+        requestRender();
+      });
+    buildChoices('sizeChoices', SIZES, state.sizeId,
+      function (id) {
+        state.sizeId = id;
+        buildPanelBar();
+        refreshChoices();
+        requestRender();
+      });
+  }
+
+  function syncZoom() {
+    $('zoom').value = state.frames[selectedPanel].zoom;
+  }
+
+  // --------------------------------------------------------------
+  // Photo upload: picker + drag-and-drop. Files never leave the
+  // machine; they are decoded in memory and become the new pool.
+  // --------------------------------------------------------------
+  function adoptUserPhotos(images, names) {
+    pool = images;
+    poolLabels = names;
+    state.frames.forEach(function (fr, i) {
+      fr.photo = i % pool.length;
+      fr.dx = 0; fr.dy = 0; fr.zoom = 1;
+    });
+    state.singlePhoto = 0;
+    selectedPanel = 0;
+    buildThumbs();
+    buildPanelBar();
+    syncZoom();
+    requestRender();
+  }
+
+  function readFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || [])
+      .filter(function (f) { return /^image\//.test(f.type); });
     if (!files.length) return;
-    beginChange();
-    for (const file of files) {
-      const photo = await store.addFile(file);
-      state.panels[selectedPanel].photo = photo.id;
+    var jobs = files.map(function (f) {
+      return new Promise(function (resolve) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          window.PalmPhotos.load(reader.result).then(function (img) {
+            resolve({ img: img, name: f.name.replace(/\.[^.]+$/, '') });
+          }, function () { resolve(null); });
+        };
+        reader.readAsDataURL(f);
+      });
+    });
+    Promise.all(jobs).then(function (done) {
+      var ok = done.filter(Boolean);
+      if (ok.length) {
+        adoptUserPhotos(ok.map(function (d) { return d.img; }),
+                        ok.map(function (d) { return d.name; }));
+      }
+    });
+  }
+
+  // --------------------------------------------------------------
+  // Canvas reframing: drag the selected panel, wheel to zoom.
+  // --------------------------------------------------------------
+  function bindCanvas() {
+    var drag = null;
+    function toCover(ev) {
+      var r = canvas.getBoundingClientRect();
+      return {
+        x: (ev.clientX - r.left) * canvas.width / r.width,
+        y: (ev.clientY - r.top) * canvas.height / r.height
+      };
     }
-    buildTray();
-    render();
-    setStatus(`${files.length} photo${files.length > 1 ? 's' : ''} loaded from your machine — nothing was uploaded.`);
-  });
-  document.getElementById('fillAllBtn').addEventListener('click', () => {
-    const photo = state.panels[selectedPanel].photo;
-    if (!photo) return;
-    beginChange();
-    for (const p of state.panels) p.photo = photo;
-    render();
-  });
-  document.getElementById('resetPanelBtn').addEventListener('click', () => {
-    const p = state.panels[selectedPanel];
-    p.x = 0; p.y = 0; p.zoom = 1;
-    render();
-  });
-  document.getElementById('undoBtn').addEventListener('click', undo);
-  document.getElementById('redoBtn').addEventListener('click', redo);
-  document.getElementById('autoBtn').addEventListener('click', autoCompose);
-  document.getElementById('exportBtn').addEventListener('click', doExport);
-  window.addEventListener('keydown', (ev) => {
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); undo(); }
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'y') { ev.preventDefault(); redo(); }
-  });
-}
-
-function syncUIFromState() {
-  document.getElementById('titleInput').value = state.title;
-  document.getElementById('subtitleInput').value = state.subtitle;
-  document.getElementById('kickerInput').value = state.kicker;
-  document.getElementById('heatRange').value = state.heat;
-  document.getElementById('inkRange').value = state.ink;
-  document.getElementById('grainRange').value = Math.round(state.grain * 100);
-  document.getElementById('vignetteRange').value = Math.round(state.vignette * 100);
-  document.getElementById('strengthRange').value = Math.round(state.strength * 100);
-  document.getElementById('leakRange').value = Math.round(state.leak * 100);
-  document.getElementById('halftoneCheck').checked = state.halftone === 1;
-  document.getElementById('sizeSelect').value = state.size;
-  for (const b of document.querySelectorAll('#layoutList .pick')) {
-    b.classList.toggle('active', b.dataset.layout === state.layout);
-  }
-  for (const b of document.querySelectorAll('#gradeList .pick')) {
-    b.classList.toggle('active', b.dataset.grade === state.grade);
-  }
-}
-
-// One click from photos to a finished cover: deal the ten scenes across
-// the panels in order — no scene repeats — and set the poster effects to
-// their sweet spot.
-function autoCompose() {
-  beginChange();
-  const ids = store.ids();
-  state.panels = state.panels.map((p, i) => ({
-    photo: ids.length ? ids[i % ids.length] : p.photo,
-    x: 0, y: 0, zoom: 1,
-  }));
-  state.ink = 5;
-  state.grain = 0.55;
-  state.vignette = 0.5;
-  state.strength = 0.85;
-  state.halftone = 0;
-  state.leak = 0.35;
-  syncUIFromState();
-  render();
-  setStatus('Composed. Nudge any panel, tweak the caption, then export your PNG.');
-}
-
-async function doExport() {
-  const size = sizeById(state.size);
-  const blob = await exportCoverPNG(state, store, size.w, size.h);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `neon-palms-cover-${size.w}x${size.h}.png`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-  setStatus(`Exported a ${size.w} × ${size.h} PNG — ready to post.`);
-}
-
-function setStatus(text) {
-  document.getElementById('statusLine').textContent = text;
-}
-
-// ---------- panel drag / zoom ----------
-
-function canvasPoint(ev) {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: (ev.clientX - r.left) * (canvas.width / r.width),
-    y: (ev.clientY - r.top) * (canvas.height / r.height),
-  };
-}
-
-function panelAt(pt) {
-  const { panels } = layoutPanels(state.layout, canvas.width, canvas.height);
-  for (let i = panels.length - 1; i >= 0; i--) {
-    const p = panels[i];
-    if (p.rot) {
-      const dx = pt.x - (p.x + p.w / 2);
-      const dy = pt.y - (p.y + p.h / 2);
-      const cos = Math.cos(-p.rot);
-      const sin = Math.sin(-p.rot);
-      const lx = dx * cos - dy * sin;
-      const ly = dx * sin + dy * cos;
-      if (Math.abs(lx) <= p.w / 2 && Math.abs(ly) <= p.h / 2) return i;
-    } else if (pt.x >= p.x && pt.x <= p.x + p.w && pt.y >= p.y && pt.y <= p.y + p.h) {
-      return i;
+    function panelAt(p) {
+      var geo = window.PalmCover.geometry(state.layout, canvas.width, canvas.height);
+      for (var i = 0; i < geo.panels.length; i++) {
+        var r = geo.panels[i];
+        if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return i;
+      }
+      return -1;
     }
+    canvas.addEventListener('pointerdown', function (ev) {
+      var p = toCover(ev);
+      var idx = panelAt(p);
+      if (idx < 0) return;
+      if (idx !== selectedPanel) {
+        selectedPanel = idx;
+        buildPanelBar();
+        syncZoom();
+        markThumbs();
+      }
+      drag = { x: ev.clientX, y: ev.clientY };
+      canvas.setPointerCapture(ev.pointerId);
+    });
+    canvas.addEventListener('pointermove', function (ev) {
+      if (!drag) return;
+      var r = canvas.getBoundingClientRect();
+      var frame = state.frames[selectedPanel];
+      var geo = window.PalmCover.geometry(state.layout, canvas.width, canvas.height);
+      var rect = geo.panels[selectedPanel];
+      var dxPx = (ev.clientX - drag.x) * canvas.width / r.width;
+      var dyPx = (ev.clientY - drag.y) * canvas.height / r.height;
+      frame.dx = Math.max(-1, Math.min(1, frame.dx + dxPx / Math.max(1, rect.w) * 1.6));
+      frame.dy = Math.max(-1, Math.min(1, frame.dy + dyPx / Math.max(1, rect.h) * 1.6));
+      drag = { x: ev.clientX, y: ev.clientY };
+      requestRender();
+    });
+    canvas.addEventListener('pointerup', function () { drag = null; });
+    canvas.addEventListener('wheel', function (ev) {
+      ev.preventDefault();
+      var frame = state.frames[selectedPanel];
+      frame.zoom = Math.max(1, Math.min(2.6, frame.zoom * (ev.deltaY < 0 ? 1.06 : 0.94)));
+      syncZoom();
+      requestRender();
+    }, { passive: false });
   }
-  return -1;
-}
 
-function bindCanvas() {
-  let drag = null;
-  canvas.addEventListener('pointerdown', (ev) => {
-    const idx = panelAt(canvasPoint(ev));
-    if (idx < 0) return;
-    selectedPanel = idx;
-    beginChange();
-    drag = { x: ev.clientX, y: ev.clientY };
-    canvas.setPointerCapture(ev.pointerId);
-    render();
-  });
-  canvas.addEventListener('pointermove', (ev) => {
-    if (!drag) return;
-    const r = canvas.getBoundingClientRect();
-    const { panels } = layoutPanels(state.layout, canvas.width, canvas.height);
-    const p = panels[selectedPanel];
-    const pick = state.panels[selectedPanel];
-    pick.x = Math.max(-0.6, Math.min(0.6, pick.x + ((ev.clientX - drag.x) / r.width) * (canvas.width / p.w)));
-    pick.y = Math.max(-0.6, Math.min(0.6, pick.y + ((ev.clientY - drag.y) / r.height) * (canvas.height / p.h)));
-    drag = { x: ev.clientX, y: ev.clientY };
-    render();
-  });
-  canvas.addEventListener('pointerup', () => { drag = null; });
-  let wheelAt = 0;
-  canvas.addEventListener('wheel', (ev) => {
-    ev.preventDefault();
-    const idx = panelAt(canvasPoint(ev));
-    if (idx < 0) return;
-    selectedPanel = idx;
-    if (Date.now() - wheelAt > 450) beginChange();
-    wheelAt = Date.now();
-    const pick = state.panels[selectedPanel];
-    pick.zoom = Math.max(1, Math.min(3.5, pick.zoom * (ev.deltaY < 0 ? 1.08 : 0.93)));
-    render();
-  }, { passive: false });
-}
-
-// ---------- boot ----------
-
-async function boot() {
-  buildPickers();
-  bindInputs();
-  bindCanvas();
-  await store.loadSamples();
-  buildTray();
-  ensurePanels();
-  const shot = parseShotQuery(window.location.search);
-  if (shot) {
-    applyShotToState(state, shot, store.ids());
-    ensurePanels();
-    if (shot.mode === 'cover') {
-      document.body.classList.add('shot-cover');
-      const m = /^([0-9]+)x([0-9]+)$/.exec(shot.size || '');
-      if (m) {
-        state.size = EXPORT_SIZES.some((s) => s.w === Number(m[1]) && s.h === Number(m[2]))
-          ? EXPORT_SIZES.find((s) => s.w === Number(m[1]) && s.h === Number(m[2])).id : state.size;
-        canvas.width = Number(m[1]);
-        canvas.height = Number(m[2]);
-        canvas.style.width = `${m[1]}px`;
-        canvas.style.height = `${m[2]}px`;
+  // --------------------------------------------------------------
+  // Staging from URL parameters (screenshot harness).
+  // --------------------------------------------------------------
+  function applyQuery(params) {
+    if (params.get('layout')) state.layout = params.get('layout');
+    if (params.get('grade')) state.grade = params.get('grade');
+    if (params.get('title')) state.title = params.get('title');
+    if (params.get('subtitle')) state.subtitle = params.get('subtitle');
+    if (params.get('kicker')) state.kicker = params.get('kicker');
+    if (params.get('photo') === 'single') state.fillMode = 'single';
+    var size = params.get('size');
+    if (size) {
+      for (var i = 0; i < SIZES.length; i++) {
+        if (SIZES[i].w + 'x' + SIZES[i].h === size) state.sizeId = SIZES[i].id;
       }
     }
+    $('titleInput').value = state.title;
+    $('subtitleInput').value = state.subtitle;
+    $('kickerInput').value = state.kicker;
+    document.querySelectorAll('[data-fill]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-fill') === state.fillMode);
+    });
+    buildPanelBar();
+    refreshChoices();
+    requestRender();
   }
-  syncUIFromState();
-  try {
-    await Promise.race([
-      Promise.all([document.fonts.load('90px Anton'), document.fonts.load('30px Pacifico')]),
-      new Promise((resolve) => setTimeout(resolve, 3500)),
-    ]);
-  } catch (e) { /* fall back to system fonts */ }
-  render();
-  syncHistoryButtons();
-  // The capture script and power users get a small, honest API.
-  window.neonPalms = {
-    state,
-    store,
-    render,
-    exportDataURL(w, h) {
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      renderCover(c.getContext('2d'), w, h, state, store);
-      return c.toDataURL('image/png');
-    },
-  };
-  window.__shotReady = true;
-}
 
-boot();
+  // --------------------------------------------------------------
+  // Boot
+  // --------------------------------------------------------------
+  function init() {
+    canvas = $('stage');
+    ctx = canvas.getContext('2d');
+
+    $('titleInput').addEventListener('input', function (e) {
+      state.title = e.target.value; requestRender();
+    });
+    $('subtitleInput').addEventListener('input', function (e) {
+      state.subtitle = e.target.value; requestRender();
+    });
+    $('kickerInput').addEventListener('input', function (e) {
+      state.kicker = e.target.value; requestRender();
+    });
+    $('zoom').addEventListener('input', function (e) {
+      state.frames[selectedPanel].zoom = parseFloat(e.target.value);
+      requestRender();
+    });
+    $('resetFrame').addEventListener('click', function () {
+      var fr = state.frames[selectedPanel];
+      fr.dx = 0; fr.dy = 0; fr.zoom = 1;
+      syncZoom();
+      requestRender();
+    });
+    document.querySelectorAll('[data-fill]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.fillMode = b.getAttribute('data-fill');
+        document.querySelectorAll('[data-fill]').forEach(function (x) {
+          x.classList.toggle('active', x === b);
+        });
+        markThumbs();
+        requestRender();
+      });
+    });
+    $('exportBtn').addEventListener('click', exportPNG);
+    $('exportBtnTop').addEventListener('click', exportPNG);
+
+    var drop = $('dropzone');
+    var picker = $('filePicker');
+    drop.addEventListener('click', function () { picker.click(); });
+    picker.addEventListener('change', function () { readFiles(picker.files); });
+    ['dragover', 'dragenter'].forEach(function (name) {
+      drop.addEventListener(name, function (ev) {
+        ev.preventDefault();
+        drop.classList.add('over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (name) {
+      drop.addEventListener(name, function (ev) {
+        ev.preventDefault();
+        drop.classList.remove('over');
+      });
+    });
+    drop.addEventListener('drop', function (ev) {
+      readFiles(ev.dataTransfer.files);
+    });
+
+    bindCanvas();
+    buildPanelBar();
+    refreshChoices();
+    syncZoom();
+
+    var fonts = Promise.all([
+      document.fonts.load('90px Anton'),
+      document.fonts.load('90px Pacifico')
+    ]).catch(function () { return null; });
+    Promise.all([fonts, window.PalmPhotos.loadSamples()]).then(function (res) {
+      pool = res[1];
+      poolLabels = window.PalmPhotos.SAMPLES.map(function (s) { return s.label; });
+      buildThumbs();
+      renderNow();
+      readyResolve();
+    });
+  }
+
+  window.neonPalms = {
+    exportDataURL: exportDataURL,
+    applyQuery: applyQuery,
+    whenReady: whenReady,
+    getState: function () { return state; }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

@@ -3,86 +3,82 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Neon Palms Cover Studio — make your own cover art</title>
+<title>Palm Coast Cover Studio — turn your photos into a poster cover</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark" aria-hidden="true">★</span>
-    <span class="brand-name">NEON PALMS</span>
-    <span class="brand-sub">COVER STUDIO</span>
+    <div class="badge">PC</div>
+    <div class="brand-text">
+      <h1>Palm Coast Cover Studio</h1>
+      <p>Your photos in. A poster-worthy cover out. Fully offline.</p>
+    </div>
   </div>
-  <div class="top-actions">
-    <button id="undoBtn" type="button" class="ghost" title="Undo (Ctrl+Z)">↩ Undo</button>
-    <button id="redoBtn" type="button" class="ghost" title="Redo (Ctrl+Y)">↪ Redo</button>
-    <button id="autoBtn" type="button" class="magic">✦ Make my cover</button>
-    <label class="size-label">Size
-      <select id="sizeSelect"></select>
-    </label>
-    <button id="exportBtn" type="button" class="export">Export PNG</button>
-  </div>
+  <button type="button" id="exportBtnTop" class="export-top">Export PNG</button>
 </header>
 
-<div class="workspace">
-  <aside class="controls">
-    <section>
-      <h2>Photos</h2>
-      <div id="photoTray" class="tray"></div>
-      <label class="upload">
-        <input id="fileInput" type="file" accept="image/*" multiple>
-        + Add your photos
-      </label>
-      <p class="hint">Photos are read on this machine only — nothing is uploaded. Click a photo to drop it into the selected panel; double-click fills every panel.</p>
-    </section>
+<main class="workspace">
+  <section class="stage-col">
+    <div class="stage-frame">
+      <canvas id="stage" width="1920" height="1080"></canvas>
+    </div>
+    <p class="hint">Drag the selected panel to reframe it · scroll to zoom</p>
+    <div class="panel-row">
+      <span class="panel-label">Panel</span>
+      <div id="panelBar" class="chip-row"></div>
+      <label class="zoom-label" for="zoom">Zoom</label>
+      <input type="range" id="zoom" min="1" max="2.6" step="0.01" value="1">
+      <button type="button" id="resetFrame" class="chip">Reset frame</button>
+    </div>
+  </section>
 
-    <section>
-      <h2>Layout</h2>
-      <div id="layoutList" class="pick-list"></div>
-    </section>
-
-    <section>
-      <h2>Colour grade</h2>
-      <div id="gradeList" class="pick-list"></div>
-      <label class="slider">Grade strength <input id="strengthRange" type="range" min="0" max="100" value="85"></label>
-      <label class="slider">Ink bands <input id="inkRange" type="range" min="0" max="8" step="1" value="5"></label>
-    </section>
-
-    <section>
-      <h2>Caption</h2>
-      <label class="field">Title <input id="titleInput" type="text" maxlength="24" value="Neon Palms"></label>
-      <label class="field">Subtitle <input id="subtitleInput" type="text" maxlength="42" value="palm coast stories"></label>
-      <label class="field">Kicker <input id="kickerInput" type="text" maxlength="48" value="Palm Coast · Neon Nights · Bad Roads"></label>
-      <label class="slider">Heat meter <input id="heatRange" type="range" min="0" max="5" step="1" value="4"></label>
-    </section>
-
-    <section>
-      <h2>Finish</h2>
-      <label class="slider">Film grain <input id="grainRange" type="range" min="0" max="100" value="55"></label>
-      <label class="slider">Vignette <input id="vignetteRange" type="range" min="0" max="100" value="50"></label>
-      <label class="slider">Light leak <input id="leakRange" type="range" min="0" max="100" value="35"></label>
-      <label class="check"><input id="halftoneCheck" type="checkbox"> Halftone print</label>
-    </section>
-
-    <section>
-      <h2>Selected panel</h2>
-      <p id="panelInfo" class="hint">Click a panel on the cover to select it.</p>
-      <div class="row">
-        <button id="fillAllBtn" type="button" class="ghost">Fill all panels with it</button>
-        <button id="resetPanelBtn" type="button" class="ghost">Reset position</button>
+  <aside class="sidebar">
+    <section class="card">
+      <h2>1 · Photos</h2>
+      <div id="dropzone" class="dropzone">
+        Drop your photos here or click to choose — they never leave this machine
+      </div>
+      <input type="file" id="filePicker" accept="image/*" multiple hidden>
+      <div id="thumbs" class="thumbs"></div>
+      <div class="fill-row">
+        <button type="button" class="choice active" data-fill="spread">One photo per panel</button>
+        <button type="button" class="choice" data-fill="single">One photo, every panel</button>
       </div>
     </section>
+
+    <section class="card">
+      <h2>2 · Caption</h2>
+      <label class="field" for="titleInput">Title</label>
+      <input type="text" id="titleInput" value="Neon Palms" maxlength="26">
+      <label class="field" for="subtitleInput">Script subtitle</label>
+      <input type="text" id="subtitleInput" value="palm coast stories" maxlength="42">
+      <label class="field" for="kickerInput">Kicker</label>
+      <input type="text" id="kickerInput" value="One summer · Two outlaws · No brakes" maxlength="52">
+    </section>
+
+    <section class="card">
+      <h2>3 · Poster layout</h2>
+      <div id="layoutChoices" class="choice-grid"></div>
+    </section>
+
+    <section class="card">
+      <h2>4 · Film grade</h2>
+      <div id="gradeChoices" class="choice-grid"></div>
+    </section>
+
+    <section class="card">
+      <h2>5 · Export size</h2>
+      <div id="sizeChoices" class="choice-grid"></div>
+      <button type="button" id="exportBtn" class="export-main">Export PNG</button>
+      <p class="note">Exports render at full resolution with the film finish baked in. No account, no upload, no watermark.</p>
+    </section>
   </aside>
+</main>
 
-  <main class="stage">
-    <div class="canvas-wrap">
-      <canvas id="preview" width="1080" height="1080"></canvas>
-    </div>
-    <p id="statusLine" class="status">Pick a photo, pick a layout, make a cover.</p>
-    <p class="fineprint">Neon Palms Cover Studio — an original fan-made tool. Lettering: Anton &amp; Pacifico, under the SIL Open Font License (see fonts/). The sample scenes are original paintings shipped with the app.</p>
-  </main>
-</div>
-
-<script type="module" src="src/main.js"></script>
+<script src="src/photos.js"></script>
+<script src="src/cover.js"></script>
+<script src="src/main.js"></script>
+<script src="src/shots.js"></script>
 </body>
 </html>
