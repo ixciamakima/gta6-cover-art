@@ -28,6 +28,7 @@
     fillMode: 'spread',
     singlePhoto: 0,
     sizeId: 'landscape',
+    genreId: 'vice',
     frames: []
   };
   for (var f = 0; f < 9; f++) {
@@ -196,6 +197,122 @@
   }
 
   // --------------------------------------------------------------
+  // Genre gallery: one click lands a whole finished composition —
+  // lettering, layout, grade, post size and a tuned frame for
+  // every panel — in the editor, where it all stays editable.
+  // --------------------------------------------------------------
+  function applyGenre(id) {
+    var genre = window.PalmGenres.genreById(id);
+    var staged = window.PalmGenres.stateFor(genre);
+    state.title = staged.title;
+    state.subtitle = staged.subtitle;
+    state.kicker = staged.kicker;
+    state.layout = staged.layout;
+    state.grade = staged.grade;
+    state.fillMode = staged.fillMode;
+    state.singlePhoto = staged.singlePhoto;
+    state.sizeId = staged.sizeId;
+    state.frames = staged.frames;
+    state.genreId = genre.id;
+    selectedPanel = 0;
+    $('titleInput').value = state.title;
+    $('subtitleInput').value = state.subtitle;
+    $('kickerInput').value = state.kicker;
+    document.querySelectorAll('[data-fill]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-fill') === state.fillMode);
+    });
+    buildGenres();
+    buildPanelBar();
+    refreshChoices();
+    markThumbs();
+    syncZoom();
+    requestRender();
+  }
+
+  function buildGenres() {
+    var wrap = $('genreChoices');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    window.PalmGenres.GENRES.forEach(function (genre) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'genre-btn' + (genre.id === state.genreId ? ' active' : '');
+      var name = document.createElement('span');
+      name.className = 'genre-name';
+      name.textContent = genre.name;
+      var tag = document.createElement('span');
+      tag.className = 'genre-tag';
+      tag.textContent = genre.tag;
+      b.appendChild(name);
+      b.appendChild(tag);
+      b.addEventListener('click', function () { applyGenre(genre.id); });
+      wrap.appendChild(b);
+    });
+  }
+
+  // --------------------------------------------------------------
+  // The gallery wall: every genre cover rendered by the app's own
+  // engine at portrait size, hung in a row, with the featured
+  // cover shown again at the three post sizes beneath.
+  // --------------------------------------------------------------
+  function renderInto(canvas, w, h, genreState) {
+    canvas.width = w;
+    canvas.height = h;
+    window.PalmCover.render(canvas.getContext('2d'), w, h, genreState, pool);
+  }
+
+  function wallFigure(genre, w, h, caption) {
+    var fig = document.createElement('figure');
+    fig.className = 'wall-item';
+    var c = document.createElement('canvas');
+    renderInto(c, w, h, window.PalmGenres.stateFor(genre));
+    fig.appendChild(c);
+    var cap = document.createElement('figcaption');
+    cap.textContent = caption;
+    fig.appendChild(cap);
+    return fig;
+  }
+
+  function renderWall() {
+    var row = $('wallRow');
+    row.innerHTML = '';
+    window.PalmGenres.GENRES.forEach(function (genre) {
+      var fig = wallFigure(genre, 384, 480, genre.name + ' — ' + genre.tag);
+      fig.addEventListener('click', function () {
+        applyGenre(genre.id);
+        hideGallery();
+      });
+      row.appendChild(fig);
+    });
+    var strip = $('sizeStrip');
+    strip.innerHTML = '';
+    var featured = window.PalmGenres.genreById(state.genreId);
+    var featuredState = window.PalmGenres.stateFor(featured);
+    SIZES.slice(0, 3).forEach(function (size) {
+      var scale = 168 / size.h;
+      // The same composition rendered at this post size's aspect:
+      // the engine refits its panels and lettering to the canvas.
+      var fig = wallFigure(featured, Math.round(size.w * scale), 168,
+        featured.name + ' · ' + size.w + ' × ' + size.h);
+      fig.classList.add('size-item');
+      strip.appendChild(fig);
+    });
+  }
+
+  function showGallery() {
+    if (!pool.length) return;
+    renderWall();
+    $('galleryView').hidden = false;
+    document.querySelector('.workspace').style.display = 'none';
+    window.scrollTo(0, 0);
+  }
+
+  function hideGallery() {
+    $('galleryView').hidden = true;
+    document.querySelector('.workspace').style.display = '';
+  }
+
+  // --------------------------------------------------------------
   // Photo upload: picker + drag-and-drop. Files never leave the
   // machine; they are decoded in memory and become the new pool.
   // --------------------------------------------------------------
@@ -298,6 +415,7 @@
   // Staging from URL parameters (screenshot harness).
   // --------------------------------------------------------------
   function applyQuery(params) {
+    if (params.get('genre')) applyGenre(params.get('genre'));
     if (params.get('layout')) state.layout = params.get('layout');
     if (params.get('grade')) state.grade = params.get('grade');
     if (params.get('title')) state.title = params.get('title');
@@ -359,6 +477,8 @@
     });
     $('exportBtn').addEventListener('click', exportPNG);
     $('exportBtnTop').addEventListener('click', exportPNG);
+    $('galleryBtnTop').addEventListener('click', showGallery);
+    $('backToStudio').addEventListener('click', hideGallery);
 
     var drop = $('dropzone');
     var picker = $('filePicker');
@@ -381,6 +501,7 @@
     });
 
     bindCanvas();
+    buildGenres();
     buildPanelBar();
     refreshChoices();
     syncZoom();
@@ -401,6 +522,9 @@
   window.neonPalms = {
     exportDataURL: exportDataURL,
     applyQuery: applyQuery,
+    applyGenre: applyGenre,
+    showGallery: showGallery,
+    hideGallery: hideGallery,
     whenReady: whenReady,
     getState: function () { return state; }
   };

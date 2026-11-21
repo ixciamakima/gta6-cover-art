@@ -37,7 +37,22 @@ window.PalmCover = (function () {
       washA: '#0fb5ba', washB: '#ff8c42' },
     { id: 'chrome-noir', name: 'Chrome Noir',
       filter: 'grayscale(0.88) contrast(1.26) brightness(1.03)',
-      washA: '#cfd8dc', washB: '#455a64' }
+      washA: '#cfd8dc', washB: '#455a64' },
+    { id: 'noir-ink', name: 'Noir Ink',
+      filter: 'grayscale(1) contrast(1.34) brightness(0.97)',
+      washA: '#9fb4c0', washB: '#1d2733' },
+    { id: 'romance-blush', name: 'Romance Blush',
+      filter: 'sepia(0.14) saturate(1.20) contrast(1.02) brightness(1.09)',
+      washA: '#ffd3a6', washB: '#ff8fb5' },
+    { id: 'rocket-pop', name: 'Rocket Pop',
+      filter: 'saturate(1.52) contrast(1.18) hue-rotate(-8deg)',
+      washA: '#37f4e4', washB: '#7a5cff' },
+    { id: 'dust-western', name: 'Dust Western',
+      filter: 'sepia(0.52) saturate(1.06) contrast(1.08) brightness(1.02)',
+      washA: '#e8a54b', washB: '#8a5a2b' },
+    { id: 'midnight-horror', name: 'Midnight Horror',
+      filter: 'saturate(0.82) contrast(1.24) brightness(0.80) hue-rotate(24deg)',
+      washA: '#1f6f50', washB: '#0b2038' }
   ];
 
   function gradeById(id) {
@@ -61,7 +76,9 @@ window.PalmCover = (function () {
     { id: 'duo', name: 'Duo Poster' },
     { id: 'billboard', name: 'Billboard' },
     { id: 'filmstrip', name: 'Film Strip' },
-    { id: 'quad', name: 'Quad Split' }
+    { id: 'quad', name: 'Quad Split' },
+    { id: 'split-hero', name: 'Split Hero' },
+    { id: 'manga', name: 'Manga Spread' }
   ];
 
   function sheet(W, H) {
@@ -136,6 +153,33 @@ window.PalmCover = (function () {
                  panels: [{ x: s.x, y: s.y, w: s.w, h: heroH }]
                    .concat(columns(s, 3, stripY, stripH)),
                  titleMode: 'seam', seamY: s.y + heroH + s.gap / 2 };
+      case 'split-hero': {
+        var heroW = s.w * 0.56;
+        var sideX = s.x + heroW + s.gap;
+        var sideW = s.x + s.w - sideX;
+        var sideH = (s.h - s.gap) / 2;
+        return { sheet: s,
+                 panels: [
+                   { x: s.x, y: s.y, w: heroW, h: s.h },
+                   { x: sideX, y: s.y, w: sideW, h: sideH },
+                   { x: sideX, y: s.y + sideH + s.gap, w: sideW, h: sideH }
+                 ],
+                 titleMode: 'bottom' };
+      }
+      case 'manga': {
+        var rowH = (s.h - s.gap) / 2;
+        var wideW = s.w * 0.64;
+        var narrowW = s.x + s.w - (s.x + wideW + s.gap);
+        var row2Y = s.y + rowH + s.gap;
+        return { sheet: s,
+                 panels: [
+                   { x: s.x, y: s.y, w: wideW, h: rowH },
+                   { x: s.x + wideW + s.gap, y: s.y, w: narrowW, h: rowH },
+                   { x: s.x, y: row2Y, w: narrowW, h: rowH },
+                   { x: s.x + narrowW + s.gap, y: row2Y, w: wideW, h: rowH }
+                 ],
+                 titleMode: 'bottom' };
+      }
       case 'blockbuster':
       default:
         heroH = s.h * 0.615;

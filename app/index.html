@@ -15,7 +15,10 @@
       <p>Your photos in. A poster-worthy cover out. Fully offline.</p>
     </div>
   </div>
-  <button type="button" id="exportBtnTop" class="export-top">Export PNG</button>
+  <div class="top-actions">
+    <button type="button" id="galleryBtnTop" class="gallery-top">Cover Gallery</button>
+    <button type="button" id="exportBtnTop" class="export-top">Export PNG</button>
+  </div>
 </header>
 
 <main class="workspace">
@@ -34,6 +37,12 @@
   </section>
 
   <aside class="sidebar">
+    <section class="card">
+      <h2>★ · Cover gallery</h2>
+      <div id="genreChoices" class="genre-grid"></div>
+      <p class="note">One click lands a finished cover — panels, film grade, lettering and frames — ready to export or to pull apart and make your own.</p>
+    </section>
+
     <section class="card">
       <h2>1 · Photos</h2>
       <div id="dropzone" class="dropzone">
@@ -76,8 +85,23 @@
   </aside>
 </main>
 
+<section id="galleryView" class="gallery-view" hidden>
+  <div class="gallery-head">
+    <div class="gallery-title">
+      <h2>Cover Gallery</h2>
+      <p>Six finished covers from one studio — a noir, a romance, a pulp sci-fi, a western, a horror and the signature poster. Every one of them is an export of this app, and every one opens in the editor with a single click.</p>
+    </div>
+    <button type="button" id="backToStudio" class="chip">Back to studio</button>
+  </div>
+  <div id="wallRow" class="wall-row"></div>
+  <h3 class="wall-sub">One cover · every post size</h3>
+  <div id="sizeStrip" class="size-strip"></div>
+  <p class="gallery-foot">Made offline in Palm Coast Cover Studio — your photos never leave this machine.</p>
+</section>
+
 <script src="src/photos.js"></script>
 <script src="src/cover.js"></script>
+<script src="src/genres.js"></script>
 <script src="src/main.js"></script>
 <script src="src/shots.js"></script>
 </body>

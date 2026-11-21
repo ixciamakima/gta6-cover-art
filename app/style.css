@@ -83,6 +83,23 @@ body {
 
 .export-top:hover { filter: brightness(1.08); }
 
+.top-actions { display: flex; gap: 10px; align-items: center; }
+
+.gallery-top {
+  font-family: 'Anton', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffd9ec;
+  background: #2a1547;
+  border: 1px solid rgba(255, 158, 199, 0.55);
+  border-radius: 12px;
+  padding: 12px 18px;
+  cursor: pointer;
+}
+
+.gallery-top:hover { filter: brightness(1.15); }
+
 /* ---------- workspace ---------- */
 
 .workspace {
@@ -293,6 +310,105 @@ body {
 
 .note { font-size: 12.5px; line-height: 1.5; color: #a793cf; margin: 10px 0 0; }
 
+/* ---------- genre gallery card ---------- */
+
+.genre-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.genre-btn {
+  font: inherit;
+  text-align: left;
+  color: #e9defc;
+  background: #2a1547;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  padding: 8px 11px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.genre-btn:hover { filter: brightness(1.12); }
+
+.genre-btn.active {
+  background: #ff2e7e;
+  border-color: #ff2e7e;
+  color: #ffffff;
+}
+
+.genre-name { font-size: 14px; font-weight: 600; }
+
+.genre-tag { font-size: 11.5px; opacity: 0.82; line-height: 1.3; }
+
+/* ---------- gallery wall view ---------- */
+
+.gallery-view { padding: 20px 22px 26px; }
+
+.gallery-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.gallery-title h2 {
+  font-family: 'Anton', sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.gallery-title p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #c9b8ec;
+  max-width: 880px;
+}
+
+.wall-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.wall-item { margin: 0; flex: 1 1 0; min-width: 0; cursor: pointer; }
+
+.wall-item canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+.wall-item figcaption {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #d9ccf5;
+  text-align: center;
+}
+
+.wall-sub {
+  font-family: 'Anton', sans-serif;
+  font-size: 17px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #ffb347;
+  margin: 22px 0 12px;
+}
+
+.size-strip { display: flex; gap: 16px; align-items: flex-start; }
+
+.size-item { flex: 0 0 auto; cursor: default; }
+
+.size-item canvas { width: auto; height: 168px; }
+
+.gallery-foot { margin: 20px 0 0; font-size: 12.5px; color: #a793cf; }
+
 /* ---------- staged screenshot scenes ---------- */
 
 body.shot-cover .topbar,
@@ -310,6 +426,11 @@ body.shot-cover .stage-frame {
 }
 
 body.shot-cover .stage-frame canvas { border-radius: 0; }
+
+body.shot-gallery .topbar,
+body.shot-gallery .workspace { display: none; }
+
+body.shot-gallery .gallery-view { padding-top: 16px; }
 
 @media (max-width: 900px) {
   .workspace { flex-direction: column; }
